@@ -42,8 +42,10 @@
             color: var(--text-color);
             display: flex;
             flex-direction: column;
+            /* 100vh ba'zi telefonlarda manzil qatorining tagida qolib ketadi, 100dvh dinamik moslashadi */
             height: 100vh;
-            overflow: hidden; /* Ekranni qimirlamasligi uchun */
+            height: 100dvh;
+            overflow: hidden;
         }
 
         /* Matn maydoni (Katta telefon fonida oq/qora bo'ladigan maydon) */
@@ -74,9 +76,11 @@
         .controls {
             display: flex;
             justify-content: space-around;
-            padding: 15px 20px 25px;
+            padding: 15px 15px 25px;
             background-color: var(--bg-color);
-            gap: 15px;
+            gap: 10px;
+            flex-shrink: 0; /* Ekrandan chiqib ketmasligini ta'minlaydi */
+            padding-bottom: env(safe-area-inset-bottom, 25px); /* Ekrani pastida chizig'i bor iPhone'lar uchun */
         }
 
         button {
