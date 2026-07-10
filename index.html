@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jonli Tarjimon</title>
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    
+    <style>
+        /* Avtomatik Oq/Qora (Light/Dark) rejim */
+        :root {
+            --bg-color: #f5f5f7;
+            --text-color: #1d1d1f;
+            --box-bg: #ffffff;
+            --btn-start: #34c759;
+            --btn-stop: #ff3b30;
+            --btn-exit: #8e8e93;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #000000;
+                --text-color: #ffffff;
+                --box-bg: #1c1c1e;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            /* Telefonning o'z shriftini ishlatish */
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden; /* Ekranni qimirlamasligi uchun */
+        }
+
+        /* Matn maydoni (Katta telefon fonida oq/qora bo'ladigan maydon) */
+        #translation-box {
+            flex: 1;
+            margin: 15px;
+            padding: 20px;
+            background-color: var(--box-bg);
+            border-radius: 20px;
+            overflow-y: auto;
+            /* Shrift o'lchami telefonnikidek, lekin o'qishga qulay (1.3rem = kattaroq) */
+            font-size: 1.3rem; 
+            line-height: 1.6;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            scroll-behavior: smooth;
+        }
+
+        /* Status yozuvi */
+        #status {
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--btn-exit);
+            margin-bottom: 10px;
+            height: 20px;
+        }
+
+        /* Pastki tugmalar qismi */
+        .controls {
+            display: flex;
+            justify-content: space-around;
+            padding: 15px 20px 25px;
+            background-color: var(--bg-color);
+            gap: 15px;
+        }
+
+        button {
+            flex: 1;
+            padding: 15px 0;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: white;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        button:active {
+            opacity: 0.7;
+        }
+
+        .btn-start { background-color: var(--btn-start); }
+        .btn-stop { background-color: var(--btn-stop); }
+        .btn-exit { background-color: var(--btn-exit); }
+
+    </style>
+</head>
+<body>
+
+    <div id="status">Kutmoqda...</div>
+    
+    <div id="translation-box">
+        <!-- Tarjimalar shu yerga tushadi -->
+    </div>
+
+    <div class="controls">
+        <button class="btn-start" onclick="startListening()">
+            <span style="font-size:1.2rem;">▶</span> Start
+        </button>
+        <button class="btn-stop" onclick="stopListening()">
+            <span style="font-size:1.2rem;">⏹</span> Stop
+        </button>
+        <button class="btn-exit" onclick="exitApp()">
+            <span style="font-size:1.2rem;">🚪</span> Chiqish
+        </button>
+    </div>
+
+    <script>
+        const translationBox = document.getElementById('translation-box');
+        const statusEl = document.getElementById('status');
+        
+        let recognition = null;
+        let isRunning = false;
+
+        // Bepul Google Translate API orqali tarjima qilish
+        async function translateFree(text) {
+            try {
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ru&tl=uz&dt=t&q=${encodeURIComponent(text)}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                // Tarjima bo'laklarini birlashtirish
+                let translatedText = "";
+                for (let i = 0; i < data[0].length; i++) {
+                    translatedText += data[0][i][0];
+                }
+                return translatedText;
+            } catch (e) {
+                console.error("Tarjima xatosi:", e);
+                return "[Xatolik]";
+            }
+        }
+
+        function initSpeechRecognition() {
+            // Telefon brauzeridagi standart Ovoz tanuvchini chaqiramiz
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            
+            if (!SpeechRecognition) {
+                alert("Kechirasiz, telefoningiz ushbu funktsiyani qo'llab-quvvatlamaydi. Iltimos Google Chrome dan kiriting.");
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.lang = 'ru-RU';
+            recognition.continuous = true; // To'xtovsiz eshitish
+            recognition.interimResults = false; // Chala eshitganini kutmaslik
+            
+            recognition.onstart = function() {
+                statusEl.textContent = "🎙️ Mikrofon yoniq, gapiravering...";
+                statusEl.style.color = "#34c759";
+            };
+            
+            recognition.onresult = async function(event) {
+                // Eng oxirgi aytilgan gapni olish
+                const current = event.resultIndex;
+                const transcript = event.results[current][0].transcript;
+                
+                statusEl.textContent = "⏳ Tarjima qilinmoqda...";
+                
+                // O'zbekchaga o'girish
+                const translation = await translateFree(transcript);
+                
+                // Ekranga chiqarish (bitta bo'sh joy qoldirib qo'shamiz)
+                translationBox.innerHTML += translation + " ";
+                
+                // Matn ko'payganda avtomatik eng pastga tushish
+                translationBox.scrollTop = translationBox.scrollHeight;
+                
+                if (isRunning) {
+                    statusEl.textContent = "🎙️ Mikrofon yoniq, gapiravering...";
+                }
+            };
+            
+            recognition.onerror = function(event) {
+                if (event.error === 'not-allowed') {
+                    alert("Iltimos, brauzerga mikrofon ishlatishga ruxsat bering!");
+                }
+                console.error("Mikrofon xatosi: " + event.error);
+            };
+            
+            // Xato tufayli yoki o'z-o'zidan to'xtab qolsa, yana avtomatik yondiramiz
+            recognition.onend = function() {
+                if (isRunning) {
+                    recognition.start();
+                }
+            };
+        }
+
+        function startListening() {
+            if (!recognition) initSpeechRecognition();
+            
+            if (!isRunning && recognition) {
+                try {
+                    recognition.start();
+                    isRunning = true;
+                } catch(e) {}
+            }
+        }
+
+        function stopListening() {
+            if (isRunning && recognition) {
+                isRunning = false;
+                recognition.stop();
+                statusEl.textContent = "⏹ To'xtatildi.";
+                statusEl.style.color = "var(--btn-stop)";
+            }
+        }
+
+        function exitApp() {
+            stopListening();
+            // PWA / Web appni yopishga urinish
+            if(confirm("Dasturdan chiqishni xohlaysizmi?")) {
+                window.close(); 
+            }
+        }
+
+        // Boshlang'ich initsializatsiya
+        initSpeechRecognition();
+    </script>
+</body>
+</html>
