@@ -135,6 +135,7 @@
         
         let recognition = null;
         let isRunning = false;
+        let speechStartTime = 0; // 5 soniya limitini o'lchash uchun
 
         // Bepul Google Translate API orqali tarjima qilish
         async function translateFree(text) {
@@ -166,28 +167,71 @@
             recognition = new SpeechRecognition();
             recognition.lang = 'ru-RU';
             recognition.continuous = true; // To'xtovsiz eshitish
-            recognition.interimResults = false; // Chala eshitganini kutmaslik
+            recognition.interimResults = true; // Gapirish jarayonini kuzatish uchun true qilamiz
             
             recognition.onstart = function() {
                 statusEl.textContent = "🎙️ Mikrofon yoniq, gapiravering...";
                 statusEl.style.color = "#34c759";
+                speechStartTime = 0;
             };
             
             recognition.onresult = async function(event) {
-                // Eng oxirgi aytilgan gapni olish
                 const current = event.resultIndex;
+                const isFinal = event.results[current].isFinal;
                 const transcript = event.results[current][0].transcript;
                 
-                statusEl.textContent = "⏳ Tarjima qilinmoqda...";
+                if (!isFinal) {
+                    // Odam gapirishni boshlaganda vaqtni belgilaymiz
+                    if (speechStartTime === 0) {
+                        speechStartTime = Date.now();
+                    } 
+                    // Agar to'xtamay 5 soniyadan ko'p gapirsa, majburan kesamiz
+                    else if (Date.now() - speechStartTime > 5000) {
+                        recognition.stop();
+                        speechStartTime = 0;
+                    }
+                    return; // Chala matnni tarjimaga bermaymiz
+                }
                 
-                // O'zbekchaga o'girish
-                const translation = await translateFree(transcript);
+                // Gap tugadi yoki 5 soniya to'lib majburiy kesildi:
+                speechStartTime = 0;
                 
-                // Ekranga chiqarish (bitta bo'sh joy qoldirib qo'shamiz)
-                translationBox.innerHTML += translation + " ";
+                // Oldingi chala qolgan gapga yangisini qo'shamiz
+                let fullText = (heldText + " " + transcript).trim();
                 
-                // Matn ko'payganda avtomatik eng pastga tushish
-                translationBox.scrollTop = translationBox.scrollHeight;
+                // Eng oxirgi nuqta, so'roq yoki undovni qidiramiz
+                let lastPunc = Math.max(fullText.lastIndexOf('.'), fullText.lastIndexOf('?'), fullText.lastIndexOf('!'));
+                
+                let textToTranslate = "";
+                
+                if (lastPunc !== -1) {
+                    // Nuqtagacha bo'lgan to'liq gapni ajratib olamiz
+                    textToTranslate = fullText.substring(0, lastPunc + 1);
+                    // Nuqtadan keyingi chala qismni (keyingi safarga) ushlab turamiz
+                    heldText = fullText.substring(lastPunc + 1).trim();
+                } else {
+                    // Agar matnda umuman nuqta bo'lmasa, uni yig'ib boramiz.
+                    // Lekin juda uzoq kutmaslik uchun, 8 ta so'zdan oshsa tarjimaga yuboramiz.
+                    let words = fullText.split(/\s+/);
+                    if (words.length >= 8) {
+                        textToTranslate = fullText;
+                        heldText = "";
+                    } else {
+                        // Gap qisqa bo'lsa, ushlab turib keyingi qismni kutamiz
+                        heldText = fullText;
+                    }
+                }
+                
+                if (textToTranslate !== "") {
+                    statusEl.textContent = "⏳ Tarjima qilinmoqda...";
+                    
+                    // O'zbekchaga o'girish
+                    const translation = await translateFree(textToTranslate);
+                    
+                    // Ekranga chiqarish
+                    translationBox.innerHTML += translation + " ";
+                    translationBox.scrollTop = translationBox.scrollHeight;
+                }
                 
                 if (isRunning) {
                     statusEl.textContent = "🎙️ Mikrofon yoniq, gapiravering...";
