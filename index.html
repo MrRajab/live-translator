@@ -17,6 +17,7 @@
             --box-bg: #ffffff;
             --btn-start: #34c759;
             --btn-stop: #ff3b30;
+            --btn-cut: #ff9500;
             --btn-exit: #8e8e93;
         }
 
@@ -104,6 +105,7 @@
         }
 
         .btn-start { background-color: var(--btn-start); }
+        .btn-cut { background-color: var(--btn-cut); }
         .btn-stop { background-color: var(--btn-stop); }
         .btn-exit { background-color: var(--btn-exit); }
 
@@ -121,6 +123,9 @@
         <button class="btn-start" onclick="startListening()">
             <span style="font-size:1.2rem;">▶</span> Start
         </button>
+        <button class="btn-cut" onclick="forceCut()">
+            <span style="font-size:1.2rem;">✂️</span> Kesish
+        </button>
         <button class="btn-stop" onclick="stopListening()">
             <span style="font-size:1.2rem;">⏹</span> Stop
         </button>
@@ -135,7 +140,6 @@
         
         let recognition = null;
         let isRunning = false;
-        let speechStartTime = 0; // 5 soniya limitini o'lchash uchun
         let lastProcessedTranscript = ""; // Dublikat (pavtor) larni oldini olish uchun
         let heldText = ""; // Chala gaplarni saqlab turish uchun
         
@@ -174,7 +178,7 @@
             recognition.onstart = function() {
                 statusEl.textContent = "🎙️ Mikrofon yoniq, gapiravering...";
                 statusEl.style.color = "#34c759";
-                speechStartTime = 0;
+                lastProcessedTranscript = "";
             };
             
             recognition.onresult = async function(event) {
@@ -183,31 +187,23 @@
                 const transcript = event.results[current][0].transcript;
                 
                 if (!isFinal) {
-                    // Odam gapirishni boshlaganda vaqtni belgilaymiz
-                    if (speechStartTime === 0) {
-                        speechStartTime = Date.now();
-                    } 
-                    // Agar to'xtamay 5 soniyadan ko'p gapirsa, majburan kesamiz
-                    else if (Date.now() - speechStartTime > 5000) {
-                        try { recognition.stop(); } catch(e) {}
-                        // Brauzer to'xtashga ulgurishi uchun vaqtni yangilab qo'yamiz
-                        speechStartTime = Date.now();
-                    }
-                    return; // Chala matnni tarjimaga bermaymiz
+                    return; // Tugma bosilguncha yoki o'zi to'xtaguncha kutamiz
                 }
                 
-                // Dublikatlarni (takroriy gaplarni) oldini olish
+                // Dublikatlarni va to'plangan takroriy gaplarni (Android xatosi) tozalash
                 const cleanTranscript = transcript.trim();
-                if (cleanTranscript === lastProcessedTranscript) {
-                    return;
+                let newText = cleanTranscript;
+                
+                // Agar brauzer oldingi gapni qo'shib yuborgan bo'lsa, uni qirqib tashlaymiz
+                if (cleanTranscript.startsWith(lastProcessedTranscript) && lastProcessedTranscript !== "") {
+                    newText = cleanTranscript.substring(lastProcessedTranscript.length).trim();
                 }
                 lastProcessedTranscript = cleanTranscript;
                 
-                // Gap tugadi yoki 5 soniya to'lib majburiy kesildi:
-                speechStartTime = 0;
+                if (newText === "") return;
                 
                 // Oldingi chala qolgan gapga yangisini qo'shamiz
-                let fullText = (heldText + " " + transcript).trim();
+                let fullText = (heldText + " " + newText).trim();
                 
                 // Eng oxirgi nuqta, so'roq yoki undovni qidiramiz
                 let lastPunc = Math.max(fullText.lastIndexOf('.'), fullText.lastIndexOf('?'), fullText.lastIndexOf('!'));
@@ -257,11 +253,19 @@
             
             // Xato tufayli yoki o'z-o'zidan to'xtab qolsa, yana avtomatik yondiramiz
             recognition.onend = function() {
-                speechStartTime = 0;
                 if (isRunning) {
                     try { recognition.start(); } catch(e) {}
                 }
             };
+        }
+
+        // QO'LDA KESISH TUGMASI UCHUN FUNKSIYA
+        function forceCut() {
+            if (isRunning && recognition) {
+                try {
+                    recognition.stop(); // Bu "isFinal = true" hodisasini chaqiradi va matnni tarjima qiladi
+                } catch(e) {}
+            }
         }
 
         function startListening() {
