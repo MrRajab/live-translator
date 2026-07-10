@@ -136,7 +136,9 @@
         let recognition = null;
         let isRunning = false;
         let speechStartTime = 0; // 5 soniya limitini o'lchash uchun
-
+        let isStopping = false; // Ketma-ket stop() ni oldini olish uchun
+        let heldText = ""; // Chala gaplarni saqlab turish uchun
+        
         // Bepul Google Translate API orqali tarjima qilish
         async function translateFree(text) {
             try {
@@ -173,6 +175,7 @@
                 statusEl.textContent = "🎙️ Mikrofon yoniq, gapiravering...";
                 statusEl.style.color = "#34c759";
                 speechStartTime = 0;
+                isStopping = false;
             };
             
             recognition.onresult = async function(event) {
@@ -181,20 +184,24 @@
                 const transcript = event.results[current][0].transcript;
                 
                 if (!isFinal) {
+                    // Agar stop bosilgan bo'lsa, keyingi vaqtinchalik natijalarni kutmaymiz
+                    if (isStopping) return;
+
                     // Odam gapirishni boshlaganda vaqtni belgilaymiz
                     if (speechStartTime === 0) {
                         speechStartTime = Date.now();
                     } 
                     // Agar to'xtamay 5 soniyadan ko'p gapirsa, majburan kesamiz
                     else if (Date.now() - speechStartTime > 5000) {
+                        isStopping = true;
                         recognition.stop();
-                        speechStartTime = 0;
                     }
                     return; // Chala matnni tarjimaga bermaymiz
                 }
                 
                 // Gap tugadi yoki 5 soniya to'lib majburiy kesildi:
                 speechStartTime = 0;
+                isStopping = false;
                 
                 // Oldingi chala qolgan gapga yangisini qo'shamiz
                 let fullText = (heldText + " " + transcript).trim();
@@ -247,6 +254,8 @@
             
             // Xato tufayli yoki o'z-o'zidan to'xtab qolsa, yana avtomatik yondiramiz
             recognition.onend = function() {
+                isStopping = false;
+                speechStartTime = 0;
                 if (isRunning) {
                     recognition.start();
                 }
